@@ -10,6 +10,7 @@ from app.core.config import get_settings
 from app.core.logging_config import setup_logging
 from app.api.routes.chat import router as chat_router
 from app.api.routes.documents import router as documents_router
+from app.api.routes.knowledge import router as knowledge_router
 
 
 settings = get_settings()
@@ -46,6 +47,10 @@ app.include_router(
 )
 app.include_router(
     documents_router,
+    prefix=settings.api_v1_prefix,
+)
+app.include_router(
+    knowledge_router,
     prefix=settings.api_v1_prefix,
 )
 

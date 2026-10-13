@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     # Used in a later phase when we connect Ollama.
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "qwen2.5:1.5b"
+    ollama_embed_model: str = "nomic-embed-text"
 
     model_config = SettingsConfigDict(
         env_file=".env",
