@@ -189,6 +189,14 @@ class KnowledgeService:
 
         scored.sort(key=lambda item: item[0], reverse=True)
 
+        # Keep only chunks that meet the configured relevance threshold.
+        threshold = self.settings.knowledge_similarity_threshold
+        relevant = [
+            (score, entry)
+            for score, entry in scored
+            if score >= threshold
+        ]
+
         return [
             KnowledgeSource(
                 source_id=f"S{rank}",
@@ -199,7 +207,7 @@ class KnowledgeService:
                 text=entry["text"],
             )
             for rank, (score, entry) in enumerate(
-                scored[:top_k], start=1
+                relevant[:top_k], start=1
             )
         ]
 

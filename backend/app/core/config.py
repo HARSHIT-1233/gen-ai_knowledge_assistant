@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     ollama_model: str = "qwen2.5:1.5b"
     ollama_embed_model: str = "nomic-embed-text"
 
+    knowledge_similarity_threshold: float = 0.35
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

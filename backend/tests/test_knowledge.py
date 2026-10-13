@@ -8,6 +8,8 @@ from app.schemas.knowledge import KnowledgeSource
 from app.services.knowledge import get_knowledge_service
 from app.services.ollama import get_ollama_service
 
+from app.core.config import Settings
+from app.services.knowledge import KnowledgeService
 
 class FakeKnowledgeService:
     async def search(self, question, top_k=4):
@@ -73,22 +75,27 @@ def test_knowledge_ask_returns_answer_and_sources(client):
     assert data["model"] == get_settings().ollama_model
 
 
-def test_knowledge_ask_requires_indexed_documents():
+def test_knowledge_ask_handles_no_relevant_sources():
     app.dependency_overrides[get_knowledge_service] = (
         lambda: EmptyKnowledgeService()
-    )
-    app.dependency_overrides[get_ollama_service] = (
-        lambda: FakeOllamaService()
     )
 
     try:
         with TestClient(app) as test_client:
             response = test_client.post(
                 "/api/v1/knowledge/ask",
-                json={"question": "How can I reduce AWS costs?"},
+                json={
+                    "question": "What are the advantages of requirements engineering?"
+                },
             )
 
-        assert response.status_code == 409
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["sources"] == []
+        assert "couldn't find sufficiently relevant information" in (
+            data["answer"].lower()
+        )
     finally:
         app.dependency_overrides.clear()
 
@@ -103,3 +110,52 @@ def test_knowledge_ask_rejects_invalid_top_k(client):
     )
 
     assert response.status_code == 422
+
+def test_search_filters_chunks_below_threshold_sync(
+    tmp_path, monkeypatch
+):
+    import asyncio
+    import json
+
+    settings = Settings(
+        knowledge_similarity_threshold=0.7,
+        ollama_embed_model="nomic-embed-text",
+    )
+    service = KnowledgeService(settings=settings)
+    service.index_path = tmp_path / "vector_index.json"
+
+    entries = [
+        {
+            "document_id": "doc-1",
+            "filename": "notes.txt",
+            "chunk_index": 0,
+            "text": "Highly relevant passage",
+            "embedding": [1.0, 0.0],
+            "embedding_model": "nomic-embed-text",
+        },
+        {
+            "document_id": "doc-2",
+            "filename": "other.txt",
+            "chunk_index": 0,
+            "text": "Weakly relevant passage",
+            "embedding": [0.5, 0.8660254],
+            "embedding_model": "nomic-embed-text",
+        },
+    ]
+
+    service.index_path.write_text(
+        json.dumps(entries), encoding="utf-8"
+    )
+
+    async def fake_embed(texts):
+        return [[1.0, 0.0] for _ in texts]
+
+    monkeypatch.setattr(service, "_embed", fake_embed)
+
+    results = asyncio.run(
+        service.search("test question", top_k=4)
+    )
+
+    assert len(results) == 1
+    assert results[0].text == "Highly relevant passage"
+    assert results[0].score >= 0.7
