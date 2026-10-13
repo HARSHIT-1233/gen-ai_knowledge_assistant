@@ -1,8 +1,9 @@
-
 import json
+import logging
 import math
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import httpx
 
@@ -10,6 +11,8 @@ from app.core.config import Settings, get_settings
 from app.schemas.document import StoredDocument
 from app.schemas.knowledge import KnowledgeSource
 
+
+logger = logging.getLogger(__name__)
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 DOCUMENT_DIR = BACKEND_DIR / "data" / "ingested"
@@ -71,7 +74,11 @@ class KnowledgeService:
         if not self.index_path.exists():
             return []
 
-        data = json.loads(self.index_path.read_text(encoding="utf-8"))
+        try:
+            data = json.loads(self.index_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise RuntimeError("The local vector index is invalid.") from exc
+
         if not isinstance(data, list):
             raise RuntimeError("The local vector index is invalid.")
 
@@ -86,12 +93,46 @@ class KnowledgeService:
         )
         temporary.replace(self.index_path)
 
+    def delete_document_vectors(self, document_id: str) -> int:
+        try:
+            safe_id = str(UUID(document_id))
+        except (ValueError, TypeError, AttributeError):
+            return 0
+
+        entries = self._read_index()
+        retained = [
+            entry
+            for entry in entries
+            if entry.get("document_id") != safe_id
+        ]
+
+        removed_count = len(entries) - len(retained)
+
+        if removed_count:
+            self._write_index(retained)
+
+        return removed_count
+
+    def indexed_counts_by_document(self) -> dict[str, int]:
+        """Return a mapping of document_id → number of indexed chunks."""
+        try:
+            entries = self._read_index()
+        except RuntimeError as exc:
+            # A corrupt index should not break document listing.
+            logger.warning("Could not read vector index: %s", exc)
+            return {}
+
+        counts: dict[str, int] = {}
+        for entry in entries:
+            doc_id = entry.get("document_id")
+            if isinstance(doc_id, str):
+                counts[doc_id] = counts.get(doc_id, 0) + 1
+        return counts
+
     async def index_document(
         self, document_id: str
     ) -> dict[str, Any] | None:
         # Restrict IDs to UUIDs so they cannot become filesystem paths.
-        from uuid import UUID
-
         try:
             safe_id = str(UUID(document_id))
         except ValueError:

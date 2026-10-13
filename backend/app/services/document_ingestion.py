@@ -1,4 +1,3 @@
-
 import json
 import re
 from datetime import datetime, timezone
@@ -148,6 +147,41 @@ class DocumentIngestionService:
         return StoredDocument.model_validate_json(
             path.read_text(encoding="utf-8")
         )
+
+    def list_documents(self) -> list[StoredDocument]:
+        documents: list[StoredDocument] = []
+
+        if not self.storage_dir.exists():
+            return documents
+
+        for path in self.storage_dir.glob("*.json"):
+            try:
+                document = StoredDocument.model_validate_json(
+                    path.read_text(encoding="utf-8")
+                )
+                documents.append(document)
+            except (ValueError, OSError):
+                continue
+
+        return sorted(
+            documents,
+            key=lambda document: document.created_at,
+            reverse=True,
+        )
+
+    def delete_document(self, document_id: str) -> bool:
+        try:
+            safe_id = str(UUID(document_id))
+        except (ValueError, TypeError, AttributeError):
+            return False
+
+        path = self.storage_dir / f"{safe_id}.json"
+
+        if not path.is_file():
+            return False
+
+        path.unlink()
+        return True
 
 
 def get_document_ingestion_service() -> DocumentIngestionService:

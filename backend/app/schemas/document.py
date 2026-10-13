@@ -28,3 +28,14 @@ class DocumentUploadResponse(BaseModel):
     character_count: int
     chunk_count: int
     preview: str
+
+
+class DocumentSummary(BaseModel):
+    document_id: str
+    filename: str
+    content_type: str
+    created_at: datetime
+    page_count: int | None
+    character_count: int
+    chunk_count: int
+    indexed_chunk_count: int

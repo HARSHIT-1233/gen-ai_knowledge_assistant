@@ -19,12 +19,24 @@ class Settings(BaseSettings):
 
     knowledge_similarity_threshold: float = 0.35
 
+    # Browser origins allowed to call the API (comma-separated).
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
     )
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        """Split the comma-separated CORS origins into a list."""
+        return [
+            origin.strip()
+            for origin in self.cors_origins.split(",")
+            if origin.strip()
+        ]
 
 
 @lru_cache
